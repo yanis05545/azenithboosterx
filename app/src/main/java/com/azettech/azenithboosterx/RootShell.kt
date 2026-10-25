@@ -7,7 +7,7 @@ import java.io.File
 
 /**
  * Menjembatani app ke akses root (su), menggantikan posisi modul Magisk.
- * Struktur script asli (common.sh, support.sh, lib/*.sh, thermalx CLI) dibundel
+ * Struktur script asli (common.sh, support.sh, folder lib, thermalx CLI) dibundel
  * sebagai asset lalu dideploy apa adanya ke /data/local/tmp/azenith_scripts,
  * supaya CLI "thermalx" dan common.sh (yang saling memanggil pakai $MODDIR/lib/...)
  * tetap jalan tanpa perlu diubah.
