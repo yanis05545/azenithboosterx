@@ -34,7 +34,7 @@ object RootShell {
         return result.out.joinToString("\n")
     }
 
-    /** Salin seluruh assets/scripts/** (termasuk folder lib/) ke filesDir app, lalu push ke root. */
+    /** Salin seluruh assets/scripts (termasuk folder lib) ke filesDir app, lalu push ke root. */
     fun deployScripts(context: Context): String {
         val localRoot = File(context.filesDir, ASSET_ROOT)
         if (localRoot.exists()) localRoot.deleteRecursively()
