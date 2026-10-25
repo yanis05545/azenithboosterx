@@ -1,0 +1,191 @@
+#!/system/bin/sh
+# =====================================================================
+#  ThermalX v2 CLI  (butuh root)
+#  thermalx devinfo [live]   (info perangkat: device/SoC/RAM/ROM/kernel, format key=value)
+#  thermalx status [raw] | on | off | auto | toggle | scan | report | selftest
+#           doctor | preset <auto|cool|balanced|extreme> | game add|del|list <pkg>
+#           set <KEY> <nilai> | log [n] | start | stop | restart | enable
+#           fpsgo [nodes|reset [paket]]   (bukti efek FPSGO ke FPS)
+#           kernel match <berkas> | kernel apply [force] | kernel revert   (cocokkan node vs kernel nyata)
+# =====================================================================
+MODDIR=${MODDIR:-/data/adb/modules/thermalx}
+[ -f "$MODDIR/common.sh" ] || MODDIR=${0%/system/bin/*}
+export MODDIR
+. "$MODDIR/common.sh"
+load_conf
+
+daemon_alive() {
+  da_p=$(cat "$RUNDIR/daemon.pid" 2>/dev/null)
+  [ -n "$da_p" ] && kill -0 "$da_p" 2>/dev/null
+}
+hb_age() {
+  hb=$(cat "$RUNDIR/heartbeat" 2>/dev/null); [ -n "$hb" ] || { echo -1; return; }
+  echo $(( $(uptime_s) - hb ))
+}
+start_sup() {
+  rm -f "$RUNDIR/stop" "$RUNDIR/supervisor_state"
+  sp=$(cat "$RUNDIR/supervisor.pid" 2>/dev/null)
+  if [ -n "$sp" ] && kill -0 "$sp" 2>/dev/null; then echo "supervisor sudah jalan (pid $sp)"; return; fi
+  nohup sh "$MODDIR/lib/supervisor.sh" >/dev/null 2>&1 &
+  echo "supervisor dijalankan"
+}
+setmode() { echo "$1" > "$DATADIR/mode_state"; }
+
+show_status() {
+  scan_if_needed >/dev/null 2>&1
+  lv=$(cat "$RUNDIR/level" 2>/dev/null); fp=$(cat "$RUNDIR/fps_now" 2>/dev/null); tp=$(cat "$RUNDIR/temps" 2>/dev/null)
+  if [ "$1" = raw ]; then
+    echo "version=$TX_VER"
+    echo "daemon=$(daemon_alive && echo up || echo down)"
+    echo "heartbeat_age=$(hb_age)"
+    echo "mode=$(cat "$DATADIR/mode_state" 2>/dev/null || echo auto)"
+    echo "game=$(cat "$RUNDIR/game" 2>/dev/null)"
+    echo "level=${lv:-0}"
+    echo "fps=${fp:-}"
+    echo "temps=${tp:-}"
+    echo "preset=$PRESET"
+    echo "thermal_mode=$THERMAL_MODE"
+    echo "tkill=$THERMAL_KILL"
+    echo "tk_running=$(tk_list_running | wc -l)"
+    echo "bypass=$BYPASS_THERMAL"
+    echo "soc=$SOC_VENDOR/$SOC_NAME"
+    echo "rom=$ROM_FAMILY"
+    echo "tier=$TIER"
+    echo "ram_mb=$RAM_MB"
+    echo "gpu=$GPU_BACKEND"
+    echo "fpsgo=$HAS_FPSGO"
+    echo "fps_sources=$FPS_ORDER"
+    echo "disabled=$([ -f "$MODDIR/disable" ] && echo 1 || echo 0)"
+    echo "boot_count=$(cat "$DATADIR/boot_count" 2>/dev/null || echo 0)"
+    echo "safe_mode=$(cat "$DATADIR/safe_mode" 2>/dev/null)"
+    return
+  fi
+  echo "=== ThermalX $TX_VER ==="
+  echo "Daemon     : $(daemon_alive && echo "jalan (heartbeat $(hb_age)s lalu)" || echo MATI)"
+  echo "Module     : $([ -f "$MODDIR/disable" ] && echo "DISABLED" || echo aktif)   boot_count=$(cat "$DATADIR/boot_count" 2>/dev/null || echo 0)"
+  echo "SoC / Tier : $SOC_VENDOR / $SOC_NAME / $TIER  (RAM ${RAM_MB}MB, cluster $N_CLUSTERS, GPU $GPU_BACKEND, FPSGO $HAS_FPSGO)"
+  echo "ROM        : $ROM_FAMILY  - $ROM_WHY"
+  echo "Mode       : $(cat "$DATADIR/mode_state" 2>/dev/null || echo auto)   preset=$PRESET   thermal=$THERMAL_MODE"
+  echo "Game aktif : $(cat "$RUNDIR/game" 2>/dev/null || echo -)"
+  [ -n "$fp" ] && echo "FPS/plafon/level: $fp"
+  [ -n "$tp" ] && echo "Suhu SoC|batt|skin|state: $tp"
+  echo "Sumber FPS : ${FPS_ORDER:-tidak ada}"
+  echo "Tulis sysfs: ok=$(grep -c '^ok' "$RUNDIR/writes" 2>/dev/null) dibulatkan=$(grep -c '^diff' "$RUNDIR/writes" 2>/dev/null) ditolak=$(grep -c '^rej' "$RUNDIR/writes" 2>/dev/null)"
+}
+
+# ---------------- selftest: uji nyata di device INI -----------------
+selftest() {
+  echo "=== ThermalX selftest (non-destruktif: apply -> verifikasi -> revert) ==="
+  daemon_alive && [ -f "$RUNDIR/game" ] && { echo "Game sedang aktif, selftest dibatalkan."; return 1; }
+  scan_all; load_conf
+  FPSGO_AUDITION=0       # selftest menerapkan semua grup sekaligus untuk menguji revert
+  thermal_limits_init; preset_params
+  echo "[scan] vendor=$SOC_VENDOR tier=$TIER cluster=$N_CLUSTERS gpu=$GPU_BACKEND fpsgo=$HAS_FPSGO fg_method=$FG_METHOD"
+  [ "$FG_METHOD" = 0 ] && echo "  ! deteksi foreground app GAGAL di semua metode"
+  [ "$N_CLUSTERS" = 0 ] && echo "  ! tidak ada cpufreq terbaca"
+  [ "$GPU_BACKEND" = none ] && echo "  ! GPU tidak punya backend yang dikenali (floor GPU di-skip)"
+  echo "[snapshot] simpan nilai awal"
+  snap="$RUNDIR/selftest_before"; snap2="$RUNDIR/selftest_after"
+  take_snap() { { for f in "$R"/sys/devices/system/cpu/cpufreq/policy*/scaling_min_freq "$R"/sys/class/devfreq/*/min_freq \
+       "$R"/sys/class/thermal/thermal_zone*/mode "$R"/proc/sys/vm/min_free_kbytes "$R"/proc/sys/kernel/printk \
+       "$R"/sys/block/*/queue/read_ahead_kb; do [ -r "$f" ] && echo "$f=$(cat "$f" 2>/dev/null)"; done
+       echo "refresh=$(settings get system peak_refresh_rate 2>/dev/null)/$(settings get system min_refresh_rate 2>/dev/null)"; } > "$1"; }
+  take_snap "$snap"
+  : > "$RUNDIR/writes"
+  for fn in thermal_apply perf_sched_apply perf_fpsgo_apply log_reduce_apply perf_touch_apply perf_io_apply refresh_apply network_apply ram_apply; do
+    "$fn" && echo "  [ok]   $fn" || echo "  [gagal] $fn"
+  done
+  for lv in 1 3 5 0; do perf_set_level $lv; echo "  [level $lv] cpu/gpu/uclamp ditulis"; done
+  sleep 2
+  temps_read probe; echo "[suhu] soc=${T_SOC:-?} batt=${T_BATT:-?} skin=${T_SKIN:-?}  (batas $SOC_LIM/$BATT_LIM/$SKIN_LIM)"
+  [ -z "$T_SOC" ] && echo "  ! suhu SoC tidak terbaca -> monitor hanya mengandalkan baterai/skin"
+  echo "[hasil tulis] ok=$(grep -c '^ok' "$RUNDIR/writes") dibulatkan-kernel=$(grep -c '^diff' "$RUNDIR/writes") DITOLAK=$(grep -c '^rej' "$RUNDIR/writes")"
+  grep '^rej' "$RUNDIR/writes" | head -n 15
+  echo "[revert] cleanup_all"
+  cleanup_all
+  take_snap "$snap2"
+  if diff "$snap" "$snap2" >/dev/null 2>&1; then echo "[verifikasi] SEMUA nilai kembali ke kondisi awal: LULUS"
+  else echo "[verifikasi] ADA nilai yang tidak kembali (mungkin diubah sistem saat test):"; diff "$snap" "$snap2" | head -n 20; fi
+  rm -f "$snap" "$snap2"
+  echo "[fps] sumber tersedia: ${FPS_ORDER:-tidak ada} (sumber sebenarnya baru bisa diuji saat game berjalan: lihat 'thermalx fps' saat main)"
+  echo "Laporan lengkap: $SCANDIR/scan_report.txt  | kirim hasil 'thermalx report' bila ada yang aneh."
+}
+
+case "$1" in
+  status) show_status "$2" ;;
+  on)     setmode on;  rm -f "$RUNDIR/stop"; daemon_alive || start_sup; echo "mode: ON (paksa boost untuk app foreground)" ;;
+  off)    setmode off; echo "mode: OFF (semua tweak direstore oleh daemon dalam beberapa detik)"
+          daemon_alive || { cleanup_all; echo "daemon mati: restore langsung dijalankan"; } ;;
+  auto)   setmode auto; daemon_alive || start_sup; echo "mode: AUTO" ;;
+  toggle) if [ "$(cat "$DATADIR/mode_state" 2>/dev/null)" = off ]; then setmode auto; echo "ThermalX -> AUTO"; else setmode off; echo "ThermalX -> OFF"; fi ;;
+  scan)   scan_all; load_conf; cat "$SCANDIR/scan_report.txt" ;;
+  report) scan_if_needed >/dev/null 2>&1
+          { cat "$SCANDIR/scan_report.txt"; echo; echo "== fpsgo_candidates =="; cat "$SCANDIR/fpsgo_candidates.txt" 2>/dev/null; echo; echo "== efek FPSGO =="; tail -n 30 "$EFFECT_LOG" 2>/dev/null; echo; echo "== conf =="; cat "$CONF"; echo; echo "== 80 baris log =="; tail -n 80 "$LOG"; } | tee "$DATADIR/report.txt"
+          echo; echo "(tersimpan di $DATADIR/report.txt)" ;;
+  selftest) selftest ;;
+  preset) case "$2" in auto|cool|balanced|extreme) ;; *) echo "preset: auto|cool|balanced|extreme"; exit 1 ;; esac
+          "$0" set PRESET "$2" ;;
+  set)    case "$2" in ''|*[!A-Z0-9_]*) echo "KEY harus HURUF BESAR/ANGKA/_"; exit 1 ;; esac
+          case "$3" in *[!A-Za-z0-9._,:-]*) echo "nilai tidak valid"; exit 1 ;; esac
+          grep -q "^$2=" "$CONF" 2>/dev/null || grep "^$2=" "$MODDIR/thermalx.conf.default" >> "$CONF" 2>/dev/null
+          grep -q "^$2=" "$CONF" 2>/dev/null || { echo "KEY '$2' tidak ada di config"; exit 1; }
+          sed -i "s/^$2=[^ #]*/$2=$3/" "$CONF" && echo "$2=$3 (berlaku maksimal ~90 dtk saat tidak sedang main)" ;;
+  game)   case "$2" in
+            add) case "$3" in ''|*[!A-Za-z0-9_.]*) echo "nama paket tidak valid"; exit 1 ;; esac
+                 echo "$3" >> "$DATADIR/games.user"; games_build; echo "ditambah: $3" ;;
+            del) [ -f "$DATADIR/games.user" ] && grep -vxF "$3" "$DATADIR/games.user" > "$DATADIR/games.user.t" && mv -f "$DATADIR/games.user.t" "$DATADIR/games.user"; games_build; echo "dihapus: $3" ;;
+            list) games_build; cat "$RUNDIR/games.list" ;;
+            *) echo "game add|del|list <paket>" ;;
+          esac ;;
+  fpsgo)
+    case "$2" in
+      nodes) scan_if_needed >/dev/null 2>&1; cat "$SCANDIR/fpsgo_candidates.txt" 2>/dev/null || echo "belum ada (jalankan: thermalx scan)" ;;
+      reset) if [ -n "$3" ]; then rm -f "$LEARNDIR/$3.fpsgo"; echo "hasil uji $3 dihapus"; else rm -f "$LEARNDIR"/*.fpsgo; echo "semua hasil uji dihapus (diuji ulang di game berikutnya)"; fi ;;
+      *) echo "=== FPSGO: parser, grup node, hasil uji A/B ==="
+         echo "Game aktif   : $(cat "$RUNDIR/game" 2>/dev/null || echo -)"
+         echo "File sumber  : $(cat "$RUNDIR/fps_src_cands" 2>/dev/null | head -n 5 | tr '\n' ' ')"
+         echo "Diagnosis    : $(cat "$RUNDIR/fpsgo_diag" 2>/dev/null || echo '(belum ada, jalankan game)')"
+         echo "FPS/plafon/level: $(cat "$RUNDIR/fps_now" 2>/dev/null || echo -)"
+         echo "--- status grup (grup|status|node|selisih dalam 0.1%|delta jank) ---"
+         cat "$RUNDIR/fpsgo_state" 2>/dev/null || echo "(tidak ada sesi game)"
+         echo "--- hasil uji tersimpan (paket: grup|verdict|selisih 0.1%|jank|waktu|kernel) ---"
+         for lf in "$LEARNDIR"/*.fpsgo; do [ -f "$lf" ] || continue; echo "[${lf##*/}]"; cat "$lf"; done
+         echo "--- 20 baris terakhir efek ---"; tail -n 20 "$EFFECT_LOG" 2>/dev/null ;;
+    esac ;;
+  thermalkill) case "$2" in
+      on) tk_on ;; off) tk_off ;; now) tk_now ;;
+      status|verify|"") tk_status ;;
+      *) echo "thermalx thermalkill on|off|now|status" ;;
+    esac ;;
+  bypass) case "$2" in
+      on) by_on ;; off) by_off ;;
+      status|"") by_status ;;
+      *) echo "thermalx bypass on|off|status" ;;
+    esac ;;
+  devinfo) case "$2" in live) devinfo_live ;; *) devinfo_all ;; esac ;;
+  fps)    cat "$RUNDIR/fps_now" 2>/dev/null || echo "belum ada data (jalankan game dulu)"; echo "format: fps plafon level" ;;
+  kernel)
+    case "$2" in
+      match) [ -n "$3" ] || { echo "thermalx kernel match <path berkas>"; exit 1; }
+             kernel_match_run "$3" ;;
+      apply) kernel_match_apply "$3" ;;
+      revert) kernel_match_revert ;;
+      *) echo "thermalx kernel match <berkas> | kernel apply [force] | kernel revert" ;;
+    esac ;;
+  log)    tail -n "${2:-40}" "$LOG" ;;
+  start)  start_sup ;;
+  stop)   touch "$RUNDIR/stop"; echo "stop diminta" ;;
+  restart) touch "$RUNDIR/stop"; sleep 4; start_sup ;;
+  enable) rm -f "$MODDIR/disable"; echo 0 > "$DATADIR/boot_count"; rm -f "$RUNDIR/stop"; start_sup; echo "module diaktifkan kembali" ;;
+  doctor)
+    echo "=== ThermalX doctor ==="
+    for f in common.sh lib/core.sh lib/scan.sh lib/thermal.sh lib/perf.sh lib/fps.sh lib/fpsgo.sh lib/fpsgo_parse.awk lib/kernel_match.sh lib/misc.sh lib/devinfo.sh lib/thermalkill.sh lib/tkloop.sh lib/bypass.sh lib/daemon.sh lib/supervisor.sh post-fs-data.sh service.sh safe_trigger.sh; do
+      [ -f "$MODDIR/$f" ] && echo "  [OK] $f" || echo "  [HILANG] $f"
+    done
+    echo "- restore semua state"; cleanup_all
+    rm -f "$MODDIR/disable" "$RUNDIR/stop"; echo 0 > "$DATADIR/boot_count"
+    echo "- scan ulang"; scan_all; load_conf
+    echo "- laporan -> $DATADIR/report.txt"; "$0" report >/dev/null 2>&1
+    echo "Selesai. Reboot untuk memastikan bersih." ;;
+  *) echo "Pemakaian: thermalx status|on|off|auto|toggle|scan|report|selftest|doctor|preset|game|set|fps|fpsgo|kernel|devinfo|thermalkill|bypass|log|start|stop|restart|enable"; exit 1 ;;
+esac

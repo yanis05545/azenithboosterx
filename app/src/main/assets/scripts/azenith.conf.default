@@ -1,0 +1,96 @@
+# ===================================================================
+#  ThermalX Gaming Booster v2 - konfigurasi
+#  Lokasi aktif: /data/adb/thermalx/thermalx.conf
+#  Ubah lewat WebUI, `thermalx set KEY NILAI`, atau edit file ini.
+#  Berlaku maksimal ~90 detik (saat tidak sedang main) atau di game berikutnya.
+# ===================================================================
+CONF_VERSION=2
+
+# Preset boost: auto (ikut tier device) | cool | balanced | extreme
+PRESET=auto
+
+# Thermal: off | soft | auto | hard   (lihat README bagian Thermal)
+THERMAL_MODE=auto
+
+# Disable Thermal mandiri (service *thermal* dimatikan & dijaga mati, tahan reboot)
+THERMAL_KILL=0
+TK_BATT_MAX=45          # pengaman: baterai >= ini selama TK_HOT_SEC -> otomatis dikembalikan
+TK_SKIN_MAX=47
+TK_HOT_SEC=10
+TK_TICK=2            # watchdog (detik), maksimal efektif 2
+TK_BLOCK=1           # 1 = bind-mount stub di binary HAL yang terus dinyalakan ulang
+TK_BLOCK_AFTER=2     # berapa kali hidup-lagi sebelum BLOCK
+TK_KERNEL=1          # 1 = matikan PPM thermal + naikkan trip passive/active zona SoC
+TK_TRIP_C=90         # target trip (C); hanya dinaikkan
+
+# --- Fitur (1 aktif / 0 mati) ---
+FEAT_THERMAL=1          # A: thermal lock/inject berbasis scan
+FEAT_TEMP_MONITOR=1     # B: monitor suhu asli + safety (JANGAN dimatikan)
+FEAT_FREQ=1             # C: lantai frekuensi CPU/GPU per-level
+FEAT_SCHED=1            # D: scheduler (rate limit, sched_boost di extreme)
+FEAT_PRIORITY=1         # E: nice/ionice proses game
+FEAT_FPS_ENGINE=1       # F/G: FPS sustain engine (basis FPSGO)
+FEAT_FPSGO_TUNE=1       # F: tuning node FPSGO (MediaTek)
+FEAT_SURFACEFLINGER=1   # I: prop SF saat boot (tier mid ke atas)
+FEAT_LOG_REDUCE=1       # J: kurangi overhead log/trace
+FEAT_TOUCH=1            # K: node touch boost vendor (jika ada)
+FEAT_IO=1               # L: read-ahead, UFS clock
+FEAT_REFRESH=1          # M: kunci refresh rate tertinggi saat game
+FEAT_NETWORK=1          # N: tuning jaringan
+FEAT_RAM=1              # O: RAM manager
+
+# --- Batas suhu pengaman (suhu ASLI) ---
+SAFE_SOC_C=auto         # auto = ikut tier (flagship 92, high 88, mid 85, low 80)
+SAFE_BATT_C=43
+SAFE_SKIN_C=46
+SAFE_HOT_SECONDS=20     # detik melewati batas sebelum boost dimatikan
+COOLDOWN_SEC=180
+INJECT_C=40             # suhu emulasi bila kernel punya emul_temp
+TRIP_RAISE_C=0          # hanya THERMAL_MODE=hard; naikkan trip passive (derajat)
+
+# --- Proteksi khusus THERMAL_MODE=hard (lebih ketat dari auto/soft, karena
+#     hard mematikan lebih banyak node throttle vendor) ---
+HARD_SAFE_HOT_SECONDS=8      # ganti SAFE_HOT_SECONDS saat mode hard (default 20 -> 8)
+HARD_EMERGENCY_MARGIN_C=5    # suhu > batas tier + ini = stop LANGSUNG, tanpa tunggu
+HARD_MON_SEC=2               # jarak cek suhu saat mode hard (default 4 -> 2 dtk)
+HARD_DEMOTE_AFTER_TRIP=1     # 1 = otomatis turun ke 'auto' setelah safety trip di mode hard
+
+# --- Mesin FPS ---
+FPS_TICK=2
+FPS_DROP_PCT=90         # fps < 90% plafon -> level naik
+FPS_STABLE_SAMPLES=15   # sampel stabil sebelum level turun
+
+# --- Anti-sawtooth (level CPU/GPU naik-turun cepat berulang) ---
+SAWTOOTH_WINDOW_SEC=45  # jendela waktu untuk menghitung gantian arah naik/turun
+SAWTOOTH_FLAPS=3        # berapa kali gantian arah dalam jendela = dianggap sawtooth
+SAWTOOTH_LOCK_SEC=60    # kunci level (tidak naik/turun) selama ini kalau sawtooth terdeteksi
+
+# --- FPSGO: audisi A/B (FPS diukur dari sistem, grup node yang merugikan dibuang) ---
+FPSGO_AUDITION=1        # 1 = uji tiap grup node per game; 0 = terapkan semua tanpa uji
+FPSGO_DISCOVER=1        # sertakan node biner *rescue*/*boost*/*ultra* yang ditemukan di device
+FPSGO_APPLY_UNVERIFIED=0 # 1 = terapkan grup yang tak bisa diuji (tak ada sumber FPS)
+FPSGO_AB_WARMUP=6       # sampel awal diabaikan (loading)
+FPSGO_AB_WINDOW=8       # sampel per jendela ukur (x FPS_TICK detik)
+FPSGO_AB_SETTLE=3       # sampel dibuang setelah node diubah
+FPSGO_AB_REG_PCT=3      # FPS rata-rata turun >= nilai ini (%) -> grup dibuang
+FPSGO_RELEARN_DAYS=14   # hasil uji dipakai ulang selama N hari (kernel sama)
+
+# --- Deteksi ---
+POLL_INTERVAL=3
+FG_CHECK_INGAME=5
+EXTRA_GAME_PACKAGES=    # pisah koma; atau: thermalx game add <paket>
+
+# --- Prioritas / RAM / jaringan ---
+PRIO_NICE=-6
+PRIO_RT=0               # 1 = SCHED_FIFO pada thread render saja (berisiko)
+RAM_KILL_BG=1
+RAM_DROP_CACHES=0
+NET_PING_LOG=0
+SF_BOOT_PROPS=1
+NOTIFY=1
+
+# --- Anti-bootloop ---
+BOOT_FAIL_LIMIT=3       # boot berturut-turut tak sehat sebelum self-disable
+BOOT_OK_DELAY=45        # detik setelah boot_completed sebelum boot dianggap sehat
+SAFE_WINDOW_SEC=8       # jendela baca tombol volume saat boot
+STAGE_STEP_DELAY=0

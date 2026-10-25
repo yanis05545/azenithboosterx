@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AzenithBoosterX</string>
+    <string name="no_root">Perangkat tidak root, atau akses root ditolak.</string>
+</resources>

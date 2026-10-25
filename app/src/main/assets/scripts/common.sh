@@ -1,0 +1,15 @@
+#!/system/bin/sh
+# ThermalX v2 - common.sh : memuat semua library (urutan penting).
+_TX_LIB="${MODDIR:-/data/adb/modules/thermalx}/lib"
+. "$_TX_LIB/core.sh"
+. "$_TX_LIB/scan.sh"
+. "$_TX_LIB/thermal.sh"
+. "$_TX_LIB/perf.sh"
+. "$_TX_LIB/fps.sh"
+. "$_TX_LIB/fpsgo.sh"
+. "$_TX_LIB/kernel_match.sh"
+. "$_TX_LIB/misc.sh"
+. "$_TX_LIB/devinfo.sh"
+. "$_TX_LIB/thermalkill.sh"
+. "$_TX_LIB/bypass.sh"
+. "$_TX_LIB/daemon.sh"

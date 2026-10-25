@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ThermalX</title>
+<script>
+// Shim: WebUI ini aslinya ditulis untuk root manager (KernelSU/APatch WebUI) yang
+// menyuntikkan objek global `ksu.exec(cmd, optsJson, callbackName)`. Di dalam
+// aplikasi AzenithBoosterX, "root manager" itu digantikan oleh app ini sendiri,
+// lewat jembatan Java/Kotlin `AzenithApp` (lihat WebAppInterface.kt).
+window.ksu = {
+  exec: function (cmd, optsJson, callbackName) {
+    try {
+      var stdout = AzenithApp.runCommand(cmd);
+      window[callbackName](0, stdout, '');
+    } catch (e) {
+      window[callbackName](-1, '', String(e));
+    }
+  }
+};
+</script>
+<style>
+:root{--bg:#0f1115;--card:#181b22;--card-rgb:24,27,34;--tx:#e8eaf0;--mut:#8b93a7;--ac:#4ea1ff;--ok:#3ecf8e;--warn:#f5a524;--bad:#f0616d;--bd:#262a35}
+@media(prefers-color-scheme:light){:root{--bg:#f3f5f9;--card:#fff;--card-rgb:255,255,255;--tx:#14171f;--mut:#5d667a;--ac:#1769e0;--ok:#118a5a;--warn:#b86e00;--bad:#c62b3a;--bd:#dde1ea}}
+:root[data-theme="amoled"]{--bg:#000;--card:#070707;--card-rgb:7,7,7;--bd:#1c1c1c}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
+button{outline:none}
+button:focus{outline:none}
+button:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+html,body{height:100%;overflow:hidden}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,sans-serif;padding:0;position:relative;transition:background .25s}
+.bg-layer{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center;background-repeat:no-repeat}
+.bg-dim{position:fixed;inset:0;z-index:-1;background:rgba(0,0,0,.3);pointer-events:none;transition:background .2s}
+h1{font-size:20px;margin:16px 4px 2px}small,.mut{color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin:10px 0;transition:background .2s,backdrop-filter .2s}
+.card h2{font-size:13px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.row{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px dashed var(--bd)}.row:last-child{border:0}
+.row b{font-weight:600;text-align:right;word-break:break-all}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button,select,input{font:inherit;color:var(--tx);background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:9px 12px}
+button{cursor:pointer}button.pri{background:var(--ac);color:#fff;border-color:var(--ac)}button.on{border-color:var(--ac);color:var(--ac)}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;border:1px solid var(--bd)}
+.up{color:var(--ok)}.down{color:var(--bad)}
+.sw{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px dashed var(--bd)}.sw:last-child{border:0}
+.sw input{width:20px;height:20px}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:10px;max-height:300px;overflow:auto;font:12px/1.4 ui-monospace,monospace;margin:8px 0 0}
+.bar{height:8px;border-radius:6px;background:var(--bd);overflow:hidden}.bar i{display:block;height:100%;background:var(--ac);width:0}
+.banner{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#1a2744,#121521 60%);border:1px solid var(--bd);border-radius:16px;padding:14px 16px;margin:10px 0}
+.banner .logo{width:56px;height:56px;border-radius:14px;flex:none;object-fit:cover;background:#000;border:1px solid var(--bd);box-shadow:0 2px 10px rgba(0,0,0,.45)}
+.banner .bt{flex:1;min-width:0}
+.banner .bt b{font-size:16px;letter-spacing:.02em}
+.banner .bt span{display:block;font-size:12px;color:var(--mut);margin-top:1px}
+.banner .soc{display:flex;gap:8px;flex:none}
+.banner .soc a{display:flex;align-items:center;gap:5px;font-size:12px;text-decoration:none;color:var(--tx);background:rgba(255,255,255,.06);border:1px solid var(--bd);border-radius:99px;padding:5px 10px;white-space:nowrap}
+.banner .soc svg{width:14px;height:14px;fill:currentColor;flex:none}
+@media(max-width:380px){.banner{flex-wrap:wrap}.banner .soc{width:100%;justify-content:flex-start}}
+body.tr .card,body.tr .banner{background:rgba(var(--card-rgb),.55);backdrop-filter:blur(18px) saturate(150%);-webkit-backdrop-filter:blur(18px) saturate(150%)}
+/* Dock bawah gaya Hino Manager: pil kaca melayang + pil putih untuk tab aktif + chip Telegram */
+.tabbar{touch-action:none;user-select:none;-webkit-user-select:none;position:fixed;left:14px;right:14px;bottom:calc(66px + env(safe-area-inset-bottom,0px));z-index:50;display:flex;gap:2px;overflow-x:auto;margin:0;padding:7px;border-radius:999px;background:rgba(var(--card-rgb),.5);backdrop-filter:blur(24px) saturate(170%);-webkit-backdrop-filter:blur(24px) saturate(170%);border:1.5px solid rgba(255,255,255,.55);box-shadow:0 10px 30px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.35);scrollbar-width:none;-ms-overflow-style:none}
+.tabbar::-webkit-scrollbar{display:none}
+.tabbar button{position:relative;z-index:1;flex:1 0 auto;padding:11px 16px;border-radius:999px;border:0;background:transparent;color:var(--tx);opacity:.8;font-size:14px;font-weight:600;white-space:nowrap;transition:color .25s,opacity .25s}
+.tabbar button.on{color:#14171f;opacity:1;background:transparent}
+.tab-ind{position:absolute;top:7px;bottom:7px;left:0;width:0;border-radius:999px;z-index:0;pointer-events:none;overflow:hidden;opacity:1;
+  background:rgba(255,255,255,.9);box-shadow:0 2px 10px rgba(0,0,0,.2);
+  transition:transform .35s cubic-bezier(.22,.9,.3,1),width .35s cubic-bezier(.22,.9,.3,1),scale .2s,background .2s,box-shadow .2s,border-color .2s}
+.tabbar.drag .tab-ind{transition:width .15s,scale .2s;scale:1.06 1.12}
+/* body.lg = toggle "Liquid Glass pada tab geser" (Tampilan). Sebelumnya toggle ini
+   ada di UI & localStorage tapi tidak pernah punya CSS -> tidak berefek. */
+body.lg .tab-ind{top:5px;bottom:5px;
+  background:linear-gradient(180deg,rgba(255,255,255,.68),rgba(255,255,255,.3) 55%,rgba(255,255,255,.22));
+  backdrop-filter:blur(16px) saturate(180%) brightness(1.08);-webkit-backdrop-filter:blur(16px) saturate(180%) brightness(1.08);
+  border:1px solid rgba(255,255,255,.75);
+  box-shadow:0 3px 12px rgba(0,0,0,.25),0 1px 1px rgba(0,0,0,.08),inset 0 1px 1px rgba(255,255,255,.95),inset 0 -8px 10px -8px rgba(0,0,0,.2)}
+body.lg .tab-ind::after{content:"";position:absolute;top:1px;left:10%;right:10%;height:38%;border-radius:999px;
+  background:linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,0));pointer-events:none}
+body.lg .tabbar.drag .tab-ind{box-shadow:0 6px 18px rgba(0,0,0,.32),inset 0 1px 1px rgba(255,255,255,1),inset 0 -8px 10px -8px rgba(0,0,0,.25)}
+.tabbar.drag button{cursor:grabbing}
+.tgchip{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:49;display:flex;align-items:center;gap:8px;max-width:calc(100% - 52px);padding:9px 18px 9px 10px;border-radius:999px;text-decoration:none;color:var(--tx);font-size:14px;font-weight:600;background:rgba(var(--card-rgb),.5);backdrop-filter:blur(24px) saturate(170%);-webkit-backdrop-filter:blur(24px) saturate(170%);border:1.5px solid rgba(255,255,255,.55);box-shadow:0 8px 24px rgba(0,0,0,.24);white-space:nowrap;overflow:hidden}
+.tgchip .tgi{width:30px;height:30px;border-radius:50%;background:#2aabee;display:flex;align-items:center;justify-content:center;flex:none}
+.tgchip .tgi svg{width:16px;height:16px;fill:#fff;margin-left:-1px}
+.tgchip i{font-style:normal;opacity:.6}
+.tgchip small{color:var(--mut);font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.switch{position:relative;display:inline-block;width:46px;height:26px;flex:none}
+.switch input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;z-index:2;padding:0;border:0}
+.switch .slider{position:absolute;inset:0;background:var(--bd);border-radius:99px;transition:background .2s}
+.switch .slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.switch input:checked + .slider{background:var(--ok)}
+.switch input:checked + .slider:before{transform:translateX(20px)}
+.pager{position:fixed;inset:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:smooth;margin:0;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.pager::-webkit-scrollbar{display:none}
+.page{flex:0 0 100%;max-width:100%;height:100%;scroll-snap-align:start;scroll-snap-stop:always;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;padding:calc(env(safe-area-inset-top,0px) + 30px) 12px calc(168px + env(safe-area-inset-bottom,0px))}
+.seg{display:flex;gap:8px;margin:4px 0 14px}
+.seg button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--bd);background:var(--bg);color:var(--mut)}
+.seg button.on{border-color:var(--ac);color:var(--ac);background:rgba(78,161,255,.1)}
+.bgprev{width:100%;height:110px;border-radius:12px;border:1px dashed var(--bd);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;color:var(--mut);font-size:12px;margin:10px 0;text-align:center;padding:8px}
+input[type=range]{width:100%;padding:0}
+.sub{font-size:11px;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.07em;margin:14px 0 2px;padding-top:2px}.sub:first-of-type{margin-top:2px}
+.rom{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;border:1px solid var(--ac);color:var(--ac)}
+.rom.stock{border-color:var(--ok);color:var(--ok)}.rom.port{border-color:var(--warn);color:var(--warn)}.rom.gsi{border-color:var(--bad);color:var(--bad)}
+.note{display:block;font-size:12px;color:var(--mut);margin:2px 0 4px;line-height:1.35}
+.bar.sm{height:6px;margin:2px 0 6px}
+</style>
+</head>
+<body>
+<div class="bg-layer" id="bgLayer"></div>
+<div class="bg-dim" id="bgDim"></div>
+
+<template id="hdrTpl">
+<div class="banner">
+ <img class="logo" alt="AZENITHTECH" src="data:image/jpeg;base64,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">
+ <div class="bt"><b>AZENITHTECH.</b><span>ThermalX Gaming Booster</span></div>
+ <div class="soc">
+  <a href="https://tiktok.com/@azettech" target="_blank" rel="noopener">
+   <svg viewBox="0 0 24 24"><path d="M16.6 5.82c-1.01-.88-1.6-2.14-1.6-3.52h-3.03v13.6c0 1.52-1.23 2.75-2.75 2.75a2.75 2.75 0 0 1 0-5.5c.27 0 .54.04.78.11V9.69a5.78 5.78 0 0 0-.78-.05 5.78 5.78 0 1 0 5.78 5.78V9.6a7.6 7.6 0 0 0 4.4 1.4V8c-1.1 0-2.1-.37-2.8-.97z"/></svg>
+   @azettech
+  </a>
+  <a href="https://t.me/yanzz091" target="_blank" rel="noopener">
+   <svg viewBox="0 0 24 24"><path d="M21.9 4.3 18.9 19c-.2 1-.8 1.2-1.6.8l-4.5-3.3-2.2 2.1c-.2.2-.4.4-.9.4l.3-4.6 8.4-7.6c.4-.3-.1-.5-.5-.2L7 12l-4.4-1.4c-1-.3-1-1 .2-1.4l17.1-6.6c.8-.3 1.5.2 1.2 1.7z"/></svg>
+   @yanzz091
+  </a>
+ </div>
+</div>
+
+<h1>ThermalX <small class="js-ver"></small></h1>
+<div class="mut js-sub">memuat…</div>
+
+</template>
+
+<div class="tabbar" id="tabbar">
+ <i class="tab-ind" id="tabInd"></i>
+ <button data-p="status">Status</button>
+ <button data-p="kontrol">Kontrol</button>
+ <button data-p="fitur">Fitur</button>
+ <button data-p="game">Game</button>
+ <button data-p="kernel">Kernel</button>
+ <button data-p="alat">Alat</button>
+ <button data-p="tampilan">Tampilan</button>
+</div>
+
+<a class="tgchip" id="tgchip" href="https://t.me/yanzz091" target="_blank" rel="noopener">
+ <span class="tgi"><svg viewBox="0 0 24 24"><path d="M9.78 15.47l-.4 4.17c.57 0 .82-.25 1.12-.54l2.7-2.58 5.6 4.1c1.03.57 1.76.27 2.04-.95l3.7-17.3c.33-1.52-.55-2.12-1.55-1.75L1.3 9.9c-1.48.58-1.46 1.4-.26 1.77l5.55 1.73 12.9-8.13c.6-.4 1.16-.18.7.22z"/></svg></span>
+ <span>Telegram</span><i>•</i><small>t.me/yanzz091</small>
+</a>
+
+<div class="pager" id="pager">
+
+ <section class="page" id="p-status" data-p="status">
+  <div class="card" id="devcard"><h2>Status Perangkat</h2>
+   <div id="dev"></div>
+   <div class="btns" style="margin-top:10px"><button id="dev_reload">Muat ulang info perangkat</button></div>
+  </div>
+  <div class="card"><h2>Status</h2>
+   <div class="row"><span>Daemon</span><b id="s_daemon">-</b></div>
+   <div class="row"><span>Mode</span><b id="s_mode">-</b></div>
+   <div class="row"><span>Game aktif</span><b id="s_game">-</b></div>
+   <div class="row"><span>FPS / plafon</span><b id="s_fps">-</b></div>
+   <div class="row"><span>Boost level</span><b id="s_level">-</b></div>
+   <div class="bar"><i id="s_bar"></i></div>
+   <div class="row"><span>Suhu SoC / Baterai / Skin</span><b id="s_temp">-</b></div>
+   <div class="row"><span>Device</span><b id="s_dev">-</b></div>
+   <div class="row"><span>Sumber FPS</span><b id="s_src">-</b></div>
+  </div>
+ </section>
+
+ <section class="page" id="p-kontrol" data-p="kontrol">
+  <div class="card"><h2>Kontrol</h2>
+   <div class="btns" id="modes">
+    <button data-m="auto">Auto</button><button data-m="on">Paksa ON</button><button data-m="off">OFF</button>
+   </div>
+   <div class="row" style="margin-top:10px"><span>Preset</span>
+    <select id="preset"><option>auto</option><option>cool</option><option>balanced</option><option>extreme</option></select></div>
+   <div class="row"><span>Thermal</span>
+    <select id="thermal"><option>off</option><option>soft</option><option>auto</option><option>hard</option></select></div>
+   <small class="mut">Thermal "hard" mematikan lebih banyak proteksi; pengaman suhu asli tetap aktif.</small>
+  </div>
+  <div class="card"><h2>Bypass Thermal</h2>
+   <div class="sw"><span>Matikan thermal boros baterai + thermal performance (mode hard)</span><span class="switch"><input type="checkbox" id="byToggle"><span class="slider"></span></span></div>
+   <div class="row"><span>Status</span><b id="by_state">-</b></div>
+   <small class="mut">Saling kunci dengan "Disable Thermal" di bawah - cuma salah satu yang boleh aktif. Lebih ringan daripada Disable Thermal: tidak membunuh service apa pun, cuma memaksa mode thermal ke "hard" (service thermal boros baterai berhenti, node pembatas performa dimatikan), lewat jalur yang sama dengan pengaman suhu normal - jadi otomatis diturunkan lagi kalau kepanasan.</small>
+  </div>
+  <div class="card"><h2>Disable Thermal</h2>
+   <div class="sw"><span>Matikan service thermal (dijaga tetap mati, tahan reboot)</span><span class="switch"><input type="checkbox" id="tkToggle"><span class="slider"></span></span></div>
+   <div class="row"><span>Service thermal masih running</span><b id="tk_state">-</b></div>
+   <div class="btns" style="margin-top:8px"><button id="tk_verify">Verifikasi status</button><button id="tk_now">Paksa matikan sekarang</button></div>
+   <pre id="tk_out">-</pre>
+   <small class="mut">Mematikan semua service init bernama <code>*thermal*</code> yang sedang running (thermal_core, thermal_space, thermald, thermal-hal, dst) dan memeriksanya ulang tiap 5 detik. Zona suhu kernel tidak disentuh, jadi suhu asli tetap terbaca: kalau baterai/skin/SoC melewati batas selama ~10 detik, semuanya otomatis dikembalikan dan fitur dimatikan. Bukan pengganti pendingin: perangkat bisa lebih cepat panas.</small>
+  </div>
+ </section>
+
+ <section class="page" id="p-fitur" data-p="fitur">
+  <div class="card"><h2>Fitur</h2><div id="feats"></div></div>
+ </section>
+
+ <section class="page" id="p-game" data-p="game">
+  <div class="card"><h2>Daftar game</h2>
+   <div class="btns"><input id="pkg" placeholder="com.paket.game" autocapitalize="off" style="flex:1;min-width:0"><button id="addpkg">Tambah</button></div>
+   <pre id="games">-</pre>
+  </div>
+ </section>
+
+ <section class="page" id="p-kernel" data-p="kernel">
+  <div class="card"><h2>Cocokkan kernel</h2>
+   <small class="mut">Nama node di <code>fpsgo_profile.conf</code> berasal dari ingatan driver MTK lama, belum tentu cocok dengan kernel device kamu. Upload berkas kernel/driver nyata (boot Image, <code>vendor_dlkm.img</code>, atau satu <code>.ko</code>; .ko tunggal paling cepat &amp; paling berarti) untuk cek node mana yang namanya benar-benar ada di sana. Nama cocok BUKAN jaminan semantik sama - audisi A/B tiap game tetap pengaman utama.</small>
+   <div class="btns" style="margin-top:8px">
+    <input type="file" id="k_file" style="flex:1;min-width:0">
+    <button id="k_up" class="pri">Upload &amp; cocokkan</button>
+   </div>
+   <div class="bar" style="margin-top:8px"><i id="k_bar"></i></div>
+   <div class="btns" style="margin-top:8px">
+    <button id="k_apply" disabled>Terapkan hasil (node cocok saja)</button>
+    <button id="k_revert">Batalkan ke profil sebelumnya</button>
+   </div>
+   <pre id="k_out">-</pre>
+  </div>
+ </section>
+
+ <section class="page" id="p-alat" data-p="alat">
+  <div class="card"><h2>Alat</h2>
+   <div class="btns"><button id="b_scan">Scan ulang</button><button id="b_test">Selftest</button><button id="b_report">Laporan</button><button id="b_log">Log</button><button id="b_doctor">Doctor</button></div>
+   <pre id="out">-</pre>
+  </div>
+ </section>
+
+ <section class="page" id="p-tampilan" data-p="tampilan">
+  <div class="card"><h2>Tampilan</h2>
+   <div class="mut" style="margin-bottom:6px">Mode layar</div>
+   <div class="seg" id="themeSeg"><button data-th="normal">Biasa</button><button data-th="amoled">AMOLED</button></div>
+   <div class="sw"><span>Background transparan (kaca buram)</span><span class="switch"><input type="checkbox" id="trToggle"><span class="slider"></span></span></div>
+   <div class="sw"><span>Liquid Glass pada tab geser</span><span class="switch"><input type="checkbox" id="lgToggle"><span class="slider"></span></span></div>
+   <div class="row"><span>Kegelapan overlay</span><b id="dimVal">30%</b></div>
+   <input type="range" id="dimRange" min="0" max="90" value="30">
+   <div class="bgprev" id="bgPrev">Belum ada background custom</div>
+   <div class="btns" style="margin-top:4px">
+    <input type="file" id="bgFile" accept="image/png,image/jpeg" style="flex:1;min-width:0">
+   </div>
+   <div class="btns" style="margin-top:8px">
+    <button id="bgApply" class="pri">Pasang</button>
+    <button id="bgClear">Hapus</button>
+   </div>
+   <small class="mut">Gambar otomatis dikompres &amp; disimpan lokal di perangkat ini saja (tidak diunggah ke server mana pun). Format PNG/JPG/JPEG.</small>
+  </div>
+ </section>
+
+</div>
+
+<script>
+const CLI = 'MODDIR=/data/local/tmp/azenith_scripts sh /data/local/tmp/azenith_scripts/thermalx';
+const $ = id => document.getElementById(id);
+const hasKsu = typeof ksu !== 'undefined' && ksu && typeof ksu.exec === 'function';
+
+function exec(cmd) {
+  return new Promise(resolve => {
+    if (!hasKsu) return resolve({ errno: -1, stdout: '', stderr: 'bukan di WebUI KernelSU/APatch' });
+    const cb = 'tx_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const t = setTimeout(() => { delete window[cb]; resolve({ errno: -2, stdout: '', stderr: 'timeout' }); }, 120000);
+    window[cb] = (errno, stdout, stderr) => { clearTimeout(t); delete window[cb]; resolve({ errno, stdout, stderr }); };
+    try { ksu.exec(cmd, '{}', cb); } catch (e) { clearTimeout(t); delete window[cb]; resolve({ errno: -3, stdout: '', stderr: String(e) }); }
+  });
+}
+const run = a => exec(CLI + ' ' + a);
+const kv = txt => Object.fromEntries(txt.split('\n').filter(l => l.includes('=')).map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1)]; }));
+const safe = s => /^[A-Za-z0-9_.]+$/.test(s);
+const setVer = t => document.querySelectorAll('.js-ver').forEach(e => e.textContent = t);
+const setSub = t => document.querySelectorAll('.js-sub').forEach(e => e.textContent = t);
+// header (banner + judul) disisipkan ke tiap halaman supaya tiap halaman bisa di-scroll sendiri
+document.querySelectorAll('.page').forEach(p => p.insertBefore(document.getElementById('hdrTpl').content.cloneNode(true), p.firstChild));
+
+const FEATS = {
+  FEAT_THERMAL: 'A · Thermal lock/inject', FEAT_TEMP_MONITOR: 'B · Monitor suhu asli (disarankan ON)',
+  FEAT_FREQ: 'C · Lantai frekuensi CPU/GPU', FEAT_SCHED: 'D · Scheduler', FEAT_PRIORITY: 'E · Prioritas proses game',
+  FEAT_FPS_ENGINE: 'F/G · FPS sustain engine', FEAT_FPSGO_TUNE: 'F · Tuning FPSGO (MediaTek)',
+  FEAT_SURFACEFLINGER: 'I · Prop SurfaceFlinger (boot)', FEAT_LOG_REDUCE: 'J · Kurangi log/trace',
+  FEAT_TOUCH: 'K · Touch boost vendor', FEAT_IO: 'L · I/O & UFS', FEAT_REFRESH: 'M · Refresh rate tertinggi',
+  FEAT_NETWORK: 'N · Jaringan', FEAT_RAM: 'O · RAM manager'
+};
+let conf = {};
+
+async function refreshStatus() {
+  const r = await run('status raw');
+  if (r.errno !== 0 && !r.stdout) { setSub(r.stderr || 'gagal menjalankan thermalx'); return; }
+  const s = kv(r.stdout);
+  setVer('v' + (s.version || '?'));
+  const up = s.daemon === 'up';
+  $('s_daemon').innerHTML = '';
+  const sp = document.createElement('span'); sp.className = up ? 'up' : 'down';
+  sp.textContent = up ? 'jalan (hb ' + s.heartbeat_age + 's)' : 'MATI'; $('s_daemon').appendChild(sp);
+  if (s.disabled === '1') $('s_daemon').appendChild(document.createTextNode(' · module DISABLED'));
+  $('s_mode').textContent = s.mode + ' · preset ' + s.preset + ' · thermal ' + s.thermal_mode;
+  $('s_game').textContent = s.game || '-';
+  const f = (s.fps || '').split(' ');
+  $('s_fps').textContent = f[0] ? f[0] + ' / ' + f[1] : '-';
+  const lv = parseInt(s.level || '0', 10) || 0;
+  $('s_level').textContent = lv + ' / 5'; $('s_bar').style.width = (lv * 20) + '%';
+  const t = (s.temps || '').split('|');
+  $('s_temp').textContent = t.length >= 3 ? [t[0] || '?', t[1] || '?', t[2] || '?'].join(' / ') + ' °C' : '-';
+  $('s_dev').textContent = (s.soc || '?') + ' · ' + (s.rom || '?') + ' · ' + (s.tier || '?') + ' · ' + (s.ram_mb || '?') + ' MB · GPU ' + (s.gpu || '?') + (s.fpsgo === '1' ? ' · FPSGO' : '');
+  $('s_src').textContent = s.fps_sources || 'tidak ada';
+  setSub(s.safe_mode ? 'safe mode boot: ' + s.safe_mode : 'siap');
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.m === s.mode));
+  const byOn = s.bypass === '1';
+  if (!tkBusy) $('tkToggle').checked = s.tkill === '1';
+  if (!byBusy) $('byToggle').checked = byOn;
+  $('tk_state').textContent = (s.tk_running === undefined ? '-' : s.tk_running) + (s.tkill === '1' ? ' (fitur aktif)' : ' (fitur mati)');
+  $('by_state').textContent = byOn ? 'aktif (thermal ' + s.thermal_mode + ')' : 'mati';
+  // Bypass aktif -> kunci Disable Thermal (tidak bisa dinyalakan selama bypass ON).
+  // Arah sebaliknya tidak dikunci di UI: nyalakan Bypass saat Disable Thermal ON
+  // otomatis mematikan Disable Thermal dulu di backend (thermalx bypass on).
+  $('tkToggle').disabled = byOn && !tkBusy;
+  if (document.activeElement !== $('preset')) $('preset').value = s.preset;
+  if (document.activeElement !== $('thermal')) $('thermal').value = s.thermal_mode;
+  $('thermal').disabled = byOn; // selama Bypass aktif mode dikunci ke "hard" oleh backend
+}
+
+// ---------------- Status Perangkat: device, SoC, RAM/ROM, ROM, kernel ----------------
+const ARM = { d03:'A53', d04:'A35', d05:'A55', d07:'A57', d08:'A72', d09:'A73', d0a:'A75', d0b:'A76', d0c:'N1', d0d:'A77', d41:'A78', d44:'X1', d46:'A510', d47:'A710', d48:'X2', d4d:'A715', d4e:'X3', d80:'A520', d81:'A720', d82:'X4', d85:'X925', d87:'A725' };
+const SOCN = { MT6789:'Helio G99 / G100', MT6781:'Helio G96', MT6878:'Dimensity 7050', MT6886:'Dimensity 7200', MT6897:'Dimensity 8300', MT6983:'Dimensity 9000/9000+', MT6985:'Dimensity 9200/9200+', MT6989:'Dimensity 9300/9300+', MT6991:'Dimensity 9400', SM8350:'Snapdragon 888', SM8450:'Snapdragon 8 Gen 1', SM8475:'Snapdragon 8+ Gen 1', SM8550:'Snapdragon 8 Gen 2', SM8650:'Snapdragon 8 Gen 3', SM8750:'Snapdragon 8 Elite' };
+const ROMT = { stock:'Stock', 'stock-mod':'Stock (dimodifikasi)', aosp:'AOSP / Custom', port:'Port', gsi:'AOSP GSI', unknown:'Tidak diketahui' };
+const DEV_LAYOUT = [
+  ['Perangkat', [['model','Model'], ['codename','Brand · kode device'], ['uptime','Uptime']]],
+  ['SoC & CPU', [['soc','SoC'], ['cpu','CPU'], ['cpucur','Frekuensi CPU sekarang'], ['gpu','GPU'], ['gpucur','Frekuensi GPU sekarang']]],
+  ['Memori', [['ram','RAM'], ['ram_bar'], ['swap','Swap / ZRAM'], ['rom_store','ROM (penyimpanan)'], ['rom_used','Terpakai (seperti Pengaturan)'], ['rom_bar'], ['data','Partisi data'], ['data_bar']]],
+  ['Sistem', [['android','Android'], ['romtype','Tipe ROM'], ['romname','Nama ROM'], ['romwhy'], ['build','Build'], ['boot','Bootloader / Verified boot'], ['part','Partisi'], ['selinux','SELinux'], ['root','Root']]],
+  ['Kernel', [['kver','Versi kernel'], ['ktag','Nama / tag kernel'], ['kbuild','Build kernel'], ['kcc','Compiler'], ['karch','Arsitektur']]],
+  ['Baterai & layar', [['bat','Baterai'], ['bat2','Detail baterai'], ['disp','Layar']]]
+];
+let devData = {}, devBuilt = false;
+const nz = v => v !== undefined && v !== null && String(v).trim() !== '';
+// Satuan DESIMAL (1 GB = 10^9 byte) - sama dengan DevCheck & Pengaturan Android. Versi lama membagi 1024^2
+// (GiB) tapi menulis 'GB', sehingga 8,06 GB tampil 7,5 GB.
+function b2gb(b, d) { return (Number(b) / 1e9).toFixed(d === undefined ? 2 : d) + ' GB'; }
+function kb2gb(kb, d) { return b2gb(Number(kb) * 1024, d); }
+function fmtUp(sec) { sec = parseInt(sec, 10); if (!(sec >= 0)) return '-'; const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60); return (d ? d + ' hr ' : '') + h + ' jam ' + m + ' mnt'; }
+function buildDev() {
+  const box = $('dev'); box.textContent = ''; devBuilt = true;
+  DEV_LAYOUT.forEach(([title, rows]) => {
+    const h = document.createElement('div'); h.className = 'sub'; h.textContent = title; box.appendChild(h);
+    rows.forEach(([k, label]) => {
+      if (k === 'ram_bar' || k === 'data_bar' || k === 'rom_bar') { const b = document.createElement('div'); b.className = 'bar sm'; const i = document.createElement('i'); i.id = 'dv_' + k; b.appendChild(i); box.appendChild(b); return; }
+      if (k === 'romwhy') { const n = document.createElement('small'); n.className = 'note'; n.id = 'dv_romwhy'; box.appendChild(n); return; }
+      const row = document.createElement('div'); row.className = 'row';
+      const sp = document.createElement('span'); sp.textContent = label;
+      const b = document.createElement('b'); b.id = 'dv_' + k; b.textContent = '-';
+      row.append(sp, b); box.appendChild(row);
+    });
+  });
+}
+function setDv(k, v) { const el = $('dv_' + k); if (el) el.textContent = nz(v) ? v : '-'; }
+function renderDev() {
+  const d = devData; if (!devBuilt) buildDev();
+  // perangkat
+  const nm = nz(d.marketname) ? d.marketname : d.model;
+  setDv('model', [nm, nz(d.marketname) && nz(d.model) && d.marketname !== d.model ? '(' + d.model + ')' : ''].filter(nz).join(' '));
+  setDv('codename', [d.brand, d.codename].filter(nz).join(' · '));
+  setDv('uptime', nz(d.uptime_s) ? fmtUp(d.uptime_s) : '-');
+  // SoC & CPU
+  const mdl = (d.soc_model || '').toUpperCase(), mk = SOCN[mdl];
+  const socTxt = mk ? mk + ' (' + (d.soc_mfr ? d.soc_mfr + ' ' : '') + d.soc_model + ')' : [d.soc_mfr, d.soc_model].filter(nz).join(' ');
+  setDv('soc', [socTxt || d.hardware, nz(d.platform) ? 'platform ' + d.platform : ''].filter(nz).join(' · '));
+  const parts = (d.cpu_parts || '').split(',').filter(nz), arm = d.cpu_impl === '41';
+  const pol = (d.cpu_policies || '').split('|').filter(nz).map(x => { const [f, n, mx] = x.split(':'); const nmx = arm && ARM[parts[parseInt(f, 10)]] ? 'Cortex-' + ARM[parts[parseInt(f, 10)]] : 'core'; return n + '× ' + nmx + (nz(mx) ? ' @ ' + (mx / 1e6).toFixed(2) + ' GHz' : ''); });
+  setDv('cpu', [nz(d.cores) ? d.cores + ' core' : '', pol.join(' + '), d.abi].filter(nz).join(' · '));
+  const cc = (d.cpu_cur_khz || '').split(',').filter(nz).map(x => Math.round(x / 1000));
+  setDv('cpucur', cc.length ? cc.join(' / ') + ' MHz' : '-');
+  const gname = nz(d.gpu_name) ? d.gpu_name : (nz(d.gl_renderer) ? d.gl_renderer : d.gpu_node);
+  setDv('gpu', [gname, nz(d.gpu_max_hz) ? 'maks ' + Math.round(d.gpu_max_hz / 1e6) + ' MHz' : ''].filter(nz).join(' · '));
+  setDv('gpucur', nz(d.gpu_cur_hz) ? Math.round(d.gpu_cur_hz / 1e6) + ' MHz' : '-');
+  // memori
+  const rt = Number(d.mem_total_kb);
+  let ra = Number(d.mem_avail_kb);
+  if (!(ra > 0)) ra = (Number(d.mem_free_kb) || 0) + (Number(d.mem_buf_kb) || 0) + (Number(d.mem_cache_kb) || 0); // kernel lama tanpa MemAvailable
+  if (rt > 0) {
+    const used = Math.max(0, rt - ra), pc = Math.round(used / rt * 100);
+    setDv('ram', kb2gb(used) + ' / ' + kb2gb(rt) + ' (' + pc + '%) · bebas ' + kb2gb(ra));
+    $('dv_ram_bar').style.width = Math.min(100, used / rt * 100) + '%';
+  } else setDv('ram', '-');
+  const st = Number(d.swap_total_kb), sf = Number(d.swap_free_kb);
+  setDv('swap', st > 0 ? kb2gb(st - sf) + ' / ' + kb2gb(st) : 'tidak ada');
+  const sec = Number(d.disk_sectors), dt = Number(d.data_total_kb), du = Number(d.data_used_kb), da = Number(d.data_avail_kb);
+  let nomB = 0;
+  if (sec > 0) {
+    const g = sec * 512 / 1e9, std = [8, 16, 32, 64, 128, 256, 512, 1024, 2048].find(x => x >= g * 0.97) || Math.round(g);
+    nomB = std * 1e9;
+    setDv('rom_store', std + ' GB' + (nz(d.storage_type) ? ' ' + d.storage_type : ''));
+  } else setDv('rom_store', nz(d.storage_type) ? d.storage_type : '-');
+  // "Terpakai" gaya Pengaturan Android: kapasitas nominal - ruang kosong /data (sudah termasuk partisi sistem)
+  if (nomB > 0 && da > 0) {
+    const ub = Math.max(0, nomB - da * 1024);
+    setDv('rom_used', b2gb(ub, 1) + ' / ' + b2gb(nomB, 0) + ' (' + Math.round(ub / nomB * 100) + '%)');
+    $('dv_rom_bar').style.width = Math.min(100, ub / nomB * 100) + '%';
+  } else { setDv('rom_used', '-'); $('dv_rom_bar').style.width = '0'; }
+  if (dt > 0) { setDv('data', kb2gb(du, 1) + ' / ' + kb2gb(dt, 1) + ' (' + Math.round(du / dt * 100) + '%) · bebas ' + kb2gb(da, 1)); $('dv_data_bar').style.width = Math.min(100, du / dt * 100) + '%'; } else setDv('data', '-');
+  // sistem
+  setDv('android', [nz(d.android) ? 'Android ' + d.android : '', nz(d.sdk) ? 'API ' + d.sdk : '', nz(d.patch) ? 'patch ' + d.patch : ''].filter(nz).join(' · '));
+  const rtp = d.rom_type || 'unknown', rb = $('dv_romtype'); rb.textContent = '';
+  const badge = document.createElement('span'); badge.className = 'rom ' + (rtp === 'stock' || rtp === 'stock-mod' ? 'stock' : rtp === 'port' ? 'port' : rtp === 'gsi' ? 'gsi' : '');
+  badge.textContent = ROMT[rtp] || rtp; rb.appendChild(badge);
+  if (nz(d.rom_conf)) rb.appendChild(document.createTextNode(' · yakin ' + d.rom_conf));
+  setDv('romname', [d.rom_name, d.rom_ver].filter(nz).join(' '));
+  $('dv_romwhy').textContent = nz(d.rom_why) ? 'Alasan deteksi (perkiraan dari sinyal build, bukan jaminan): ' + d.rom_why : '';
+  setDv('build', [d.display_id, nz(d.build_tags) ? d.build_tags : '', nz(d.build_type) ? d.build_type : ''].filter(nz).join(' · '));
+  setDv('boot', [d.bl_locked === '1' ? 'terkunci' : d.bl_locked === '0' ? 'unlocked' : '', nz(d.vboot) ? 'vboot ' + d.vboot : ''].filter(nz).join(' · '));
+  setDv('part', [d.treble === 'true' ? 'Treble' : '', d.dynparts === 'true' ? 'dynamic' : '', nz(d.slot) ? 'slot ' + d.slot.replace('_', '') + ' (A/B)' : 'non A/B'].filter(nz).join(' · '));
+  setDv('selinux', d.selinux);
+  setDv('root', [d.root, d.root_ver].filter(nz).join(' ') || 'tidak terdeteksi');
+  // kernel
+  const kr = d.kernel_rel || '', i = kr.indexOf('-');
+  setDv('kver', i > 0 ? kr.slice(0, i) : kr);
+  setDv('ktag', i > 0 ? kr.slice(i + 1) : '(standar, tanpa tag)');
+  setDv('kbuild', d.kernel_ver);
+  setDv('kcc', nz(d.kernel_cc) ? d.kernel_cc.replace(/\s*\(https?:[^)]*\)?/g, '').trim() : '-');
+  setDv('karch', d.kernel_arch);
+  // baterai & layar
+  const bt = Number(d.bat_temp);
+  setDv('bat', [nz(d.bat_level) ? d.bat_level + '%' : '', d.bat_status, nz(d.bat_temp) ? (bt / 10).toFixed(1) + ' °C' : ''].filter(nz).join(' · '));
+  setDv('bat2', [nz(d.bat_health) ? 'health ' + d.bat_health : '', nz(d.bat_volt) ? (d.bat_volt / 1e6).toFixed(2) + ' V' : '', nz(d.bat_design_uah) ? Math.round(d.bat_design_uah / 1000) + ' mAh (desain)' : '', nz(d.bat_cycle) ? d.bat_cycle + ' siklus' : ''].filter(nz).join(' · '));
+  setDv('disp', [d.wm_size, nz(d.wm_density) ? d.wm_density + ' dpi' : ''].filter(nz).join(' · '));
+}
+async function loadDev(full) {
+  const r = await run('devinfo' + (full ? '' : ' live'));
+  if (!r.stdout) { if (full) { buildDev(); setDv('model', r.stderr || 'gagal membaca info perangkat'); } return; }
+  Object.assign(devData, kv(r.stdout)); renderDev();
+}
+$('dev_reload').onclick = () => loadDev(true);
+
+async function loadConf() {
+  const r = await exec('cat /data/adb/thermalx/thermalx.conf');
+  conf = {};
+  r.stdout.split('\n').forEach(l => { const m = l.match(/^([A-Z0-9_]+)=([^\s#]*)/); if (m) conf[m[1]] = m[2]; });
+  const box = $('feats'); box.textContent = '';
+  Object.keys(FEATS).forEach(k => {
+    const row = document.createElement('label'); row.className = 'sw';
+    const sp = document.createElement('span'); sp.textContent = FEATS[k];
+    const wrap = document.createElement('span'); wrap.className = 'switch';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = conf[k] !== '0';
+    cb.onchange = async () => { await run('set ' + k + ' ' + (cb.checked ? 1 : 0)); };
+    const slider = document.createElement('span'); slider.className = 'slider';
+    wrap.append(cb, slider);
+    row.append(sp, wrap); box.appendChild(row);
+  });
+}
+
+let tkBusy = false, byBusy = false;
+$('tkToggle').onchange = async e => {
+  tkBusy = true; const on = e.target.checked; $('tk_out').textContent = on ? 'mematikan service thermal…' : 'mengembalikan service thermal…';
+  const r = await run('thermalkill ' + (on ? 'on' : 'off')); $('tk_out').textContent = (r.stdout + r.stderr).trim() || '(tidak ada output)';
+  tkBusy = false; refreshStatus();
+};
+$('byToggle').onchange = async e => {
+  byBusy = true; const on = e.target.checked; $('by_state').textContent = on ? 'mengaktifkan…' : 'mematikan…';
+  const r = await run('bypass ' + (on ? 'on' : 'off')); $('by_state').textContent = (r.stdout + r.stderr).trim() || '(tidak ada output)';
+  byBusy = false; refreshStatus();
+};
+$('tk_now').onclick = async () => { $('tk_out').textContent = 'menyapu & memblokir service thermal…'; const r = await run('thermalkill now'); $('tk_out').textContent = (r.stdout + r.stderr).trim() || '(tidak ada output)'; refreshStatus(); };
+$('tk_verify').onclick = async () => { $('tk_out').textContent = 'memeriksa…'; const r = await run('thermalkill status'); $('tk_out').textContent = (r.stdout + r.stderr).trim() || '(tidak ada output)'; refreshStatus(); };
+
+async function loadGames() { const r = await run('game list'); $('games').textContent = r.stdout.trim() || '(kosong)'; }
+async function show(cmd) { $('out').textContent = 'menjalankan…'; const r = await run(cmd); $('out').textContent = (r.stdout + r.stderr).trim() || '(tidak ada output)'; }
+
+document.querySelectorAll('#modes button').forEach(b => b.onclick = async () => { await run(b.dataset.m); refreshStatus(); });
+$('preset').onchange = async e => { await run('preset ' + e.target.value); refreshStatus(); };
+$('thermal').onchange = async e => { await run('set THERMAL_MODE ' + e.target.value); refreshStatus(); };
+$('addpkg').onclick = async () => { const p = $('pkg').value.trim(); if (!safe(p)) { $('out').textContent = 'nama paket tidak valid'; return; } await run('game add ' + p); $('pkg').value = ''; loadGames(); };
+$('b_scan').onclick = () => show('scan');
+$('b_test').onclick = () => show('selftest');
+$('b_report').onclick = () => show('report');
+$('b_log').onclick = () => show('log 60');
+$('b_doctor').onclick = () => show('doctor');
+
+// ---------------- Cocokkan kernel: upload berkas via exec (base64 chunk) ----------------
+// Setiap chunk = satu panggilan ksu.exec (round-trip WebView -> shell), jadi berkas besar
+// di device low-end bisa makan banyak waktu DAN berisiko satu chunk gagal/timeout di tengah
+// jalan (jaringan shell lambat, WebView dibekukan OS, dsb). Supaya itu tidak memaksa upload
+// ulang dari nol: (1) tiap chunk dicoba ulang beberapa kali sebelum menyerah, (2) progres
+// (remote path + berkas) disimpan di localStorage + ukuran berkas remote SELALU dicek
+// langsung ke device (sumber kebenaran, bukan localStorage) sehingga upload bisa dilanjutkan
+// persis dari byte terakhir yang benar-benar tersimpan, baik setelah gagal maupun setelah
+// WebUI ditutup/reload di tengah jalan.
+const KDIR = '/data/adb/thermalx/incoming';
+const KRESUME_KEY = 'tx_kmatch_resume';
+const KCHUNK = 180 * 1024;
+const KRETRY = 4;
+function bytesToB64(bytes) {
+  let bin = '', CH = 8192;
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+function fileKey(f) { return f.name + '|' + f.size + '|' + (f.lastModified || 0); }
+function loadResume() { try { return JSON.parse(localStorage.getItem(KRESUME_KEY) || 'null'); } catch (e) { return null; } }
+function saveResume(v) { try { if (v) localStorage.setItem(KRESUME_KEY, JSON.stringify(v)); else localStorage.removeItem(KRESUME_KEY); } catch (e) {} }
+async function remoteSize(path) {
+  const r = await exec("wc -c < '" + path + "' 2>/dev/null");
+  const n = parseInt((r.stdout || '').trim(), 10);
+  return (r.errno === 0 && n >= 0) ? n : -1;
+}
+async function execRetry(cmd, label) {
+  let last = null;
+  for (let a = 1; a <= KRETRY; a++) {
+    const r = await exec(cmd);
+    if (r.errno === 0) return r;
+    last = r;
+    $('k_out').textContent = (label || 'mengirim') + ' gagal (percobaan ' + a + '/' + KRETRY + '): ' + (r.stderr || r.errno) + ' - mencoba lagi...';
+    await new Promise(res => setTimeout(res, Math.min(1000 * a, 4000)));
+  }
+  return last;
+}
+async function uploadAndMatch() {
+  const f = $('k_file').files[0];
+  if (!f) { $('k_out').textContent = 'pilih berkas dulu'; return; }
+  const MAXSZ = 300 * 1024 * 1024;
+  if (f.size > MAXSZ) { $('k_out').textContent = 'berkas > 300MB, dibatalkan (hemat storage /data). Upload .ko tunggal atau vendor_dlkm.img saja, bukan image penuh.'; return; }
+  if (f.size > 60 * 1024 * 1024 && !confirm('Berkas ' + Math.round(f.size / 1048576) + 'MB, upload lewat WebUI ini bisa makan waktu beberapa menit (tanpa transfer file asli, hanya lewat perintah shell). Di device lambat lebih baik upload .ko tunggal saja. Lanjutkan?')) return;
+
+  const key = fileKey(f);
+  let remote = null, startOff = 0;
+  const saved = loadResume();
+  if (saved && saved.key === key) {
+    const sz = await remoteSize(saved.remote);
+    if (sz > 0 && sz < f.size) {
+      if (confirm('Ada upload belum selesai untuk berkas ini (' + Math.round(sz / 1048576) + 'MB / ' + Math.round(f.size / 1048576) + 'MB tersimpan di device). Lanjutkan dari situ? ("Batal" = mulai ulang dari 0)')) {
+        remote = saved.remote; startOff = sz;
+      }
+    }
+  }
+
+  $('k_up').disabled = true; $('k_apply').disabled = true;
+  if (!remote) {
+    remote = KDIR + '/km_' + Date.now() + '.bin';
+    $('k_out').textContent = 'menyiapkan...';
+    const r = await execRetry("mkdir -p '" + KDIR + "' && rm -f '" + KDIR + "'/* ; : > '" + remote + "'", 'persiapan');
+    if (r.errno !== 0) { $('k_out').textContent = 'gagal menyiapkan: ' + (r.stderr || r.errno); $('k_up').disabled = false; return; }
+    startOff = 0;
+  }
+  saveResume({ key, remote, size: f.size });
+  $('k_bar').style.width = Math.round(startOff / f.size * 100) + '%';
+
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  const delim = 'KMEOF' + Math.random().toString(36).slice(2);
+  for (let off = startOff; off < bytes.length; off += KCHUNK) {
+    const b64 = bytesToB64(bytes.subarray(off, Math.min(off + KCHUNK, bytes.length)));
+    const r = await execRetry("base64 -d >> '" + remote + "' <<'" + delim + "'\n" + b64 + "\n" + delim, 'upload');
+    if (!r || r.errno !== 0) {
+      $('k_out').textContent = 'gagal mengupload di ' + Math.round(off / 1048576) + 'MB setelah ' + KRETRY + 'x percobaan: ' + (r && r.stderr || 'tidak ada respon') +
+        '\nProgres TERSIMPAN di device - tekan "Upload & cocokkan" lagi nanti untuk melanjutkan dari sini (tidak perlu ulang dari 0).';
+      $('k_up').disabled = false;
+      return;
+    }
+    const pct = Math.round(Math.min(off + KCHUNK, bytes.length) / bytes.length * 100);
+    $('k_bar').style.width = pct + '%';
+    $('k_out').textContent = 'mengupload... ' + pct + '% (' + Math.round(Math.min(off + KCHUNK, bytes.length) / 1048576) + 'MB / ' + Math.round(bytes.length / 1048576) + 'MB)';
+  }
+  // verifikasi ukuran akhir benar-benar sama sebelum dicocokkan (base64 append bisa saja
+  // "sukses" tapi terpotong kalau shell dibunuh tepat di tengah penulisan)
+  const finalSz = await remoteSize(remote);
+  if (finalSz !== bytes.length) {
+    $('k_out').textContent = 'ukuran akhir tidak cocok (device=' + finalSz + ' byte, seharusnya ' + bytes.length + ') - kemungkinan terpotong. Tekan "Upload & cocokkan" lagi untuk melanjutkan.';
+    $('k_up').disabled = false;
+    return;
+  }
+  saveResume(null);
+  $('k_out').textContent = 'mencocokkan dengan katalog...';
+  const r2 = await run("kernel match '" + remote + "'");
+  $('k_out').textContent = (r2.stdout + r2.stderr).trim() || '(tidak ada output)';
+  $('k_up').disabled = false; $('k_apply').disabled = false;
+}
+$('k_up').onclick = uploadAndMatch;
+$('k_apply').onclick = async () => {
+  $('k_out').textContent = 'menerapkan...';
+  let r = await run('kernel apply');
+  let txt = (r.stdout + r.stderr).trim();
+  if (/DITOLAK/.test(txt) && confirm('Hasil match ini BUKAN diklasifikasi "vendor_likely" (lihat laporan di bawah) - nama node yang cocok kemungkinan kebetulan/tidak berarti.\n\nAudisi A/B tetap akan menguji efek nyata ke FPS dan membuang node yang tidak terbukti membantu, tapi tetap ada risiko node tidak berguna diuji sia-sia.\n\nPaksa terapkan?')) {
+    r = await run('kernel apply force');
+    txt = (r.stdout + r.stderr).trim();
+  }
+  $('k_out').textContent = txt;
+  $('k_apply').disabled = true;
+};
+$('k_revert').onclick = async () => { $('k_out').textContent = 'membatalkan...'; const r = await run('kernel revert'); $('k_out').textContent = (r.stdout + r.stderr).trim(); };
+
+// ---------------- Tampilan: tema, transparan, liquid glass, background custom ----------------
+const THK = 'tx_theme', TRK = 'tx_tr', BGK = 'tx_bg', DMK = 'tx_dim', LGK = 'tx_lg';
+function applyLg(on) {
+  document.body.classList.toggle('lg', on);
+  $('lgToggle').checked = on;
+  requestAnimationFrame(() => moveIndicator(document.querySelector('#tabbar button[data-p="' + activeP + '"]')));
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  document.querySelectorAll('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.th === t));
+}
+function applyTr(on) { document.body.classList.toggle('tr', on); $('trToggle').checked = on; }
+function applyDim(v) { v = parseInt(v, 10) || 0; $('bgDim').style.background = 'rgba(0,0,0,' + (v / 100) + ')'; $('dimVal').textContent = v + '%'; $('dimRange').value = v; }
+function applyBg(url) {
+  if (url) {
+    $('bgLayer').style.backgroundImage = "url('" + url + "')";
+    $('bgPrev').style.backgroundImage = "url('" + url + "')";
+    $('bgPrev').textContent = '';
+  } else {
+    $('bgLayer').style.backgroundImage = '';
+    $('bgPrev').style.backgroundImage = '';
+    $('bgPrev').textContent = 'Belum ada background custom';
+  }
+}
+let savedBg = null;
+try { savedBg = localStorage.getItem(BGK); } catch (e) {}
+applyTheme((function () { try { return localStorage.getItem(THK) || 'normal'; } catch (e) { return 'normal'; } })());
+applyTr((function () { try { return localStorage.getItem(TRK) === '1'; } catch (e) { return false; } })());
+applyDim((function () { try { return localStorage.getItem(DMK) || '30'; } catch (e) { return '30'; } })());
+applyBg(savedBg || '');
+applyLg((function () { try { return localStorage.getItem(LGK) !== '0'; } catch (e) { return true; } })());
+$('lgToggle').onchange = e => { applyLg(e.target.checked); try { localStorage.setItem(LGK, e.target.checked ? '1' : '0'); } catch (e2) {} };
+
+document.querySelectorAll('#themeSeg button').forEach(b => b.onclick = () => { applyTheme(b.dataset.th); try { localStorage.setItem(THK, b.dataset.th); } catch (e) {} });
+$('trToggle').onchange = e => { applyTr(e.target.checked); try { localStorage.setItem(TRK, e.target.checked ? '1' : '0'); } catch (e2) {} };
+$('dimRange').oninput = e => { applyDim(e.target.value); try { localStorage.setItem(DMK, e.target.value); } catch (e2) {} };
+
+let pendingBg = null;
+$('bgFile').onchange = () => {
+  const f = $('bgFile').files[0];
+  if (!f) return;
+  if (!/^image\/(png|jpeg)$/.test(f.type)) { $('bgPrev').textContent = 'Format tidak didukung (PNG/JPG/JPEG saja)'; return; }
+  const img = new Image(); const reader = new FileReader();
+  reader.onload = () => {
+    img.onload = () => {
+      const MAXD = 1280; let w = img.width, h = img.height;
+      if (w > h && w > MAXD) { h = Math.round(h * MAXD / w); w = MAXD; } else if (h > MAXD) { w = Math.round(w * MAXD / h); h = MAXD; }
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      pendingBg = c.toDataURL('image/jpeg', 0.82);
+      $('bgPrev').style.backgroundImage = "url('" + pendingBg + "')"; $('bgPrev').textContent = '';
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(f);
+};
+$('bgApply').onclick = () => {
+  if (!pendingBg) { $('bgPrev').textContent = 'Pilih gambar dulu, lalu tekan Pasang'; return; }
+  try { localStorage.setItem(BGK, pendingBg); applyBg(pendingBg); }
+  catch (e) { $('bgPrev').textContent = 'Gagal menyimpan, gambar kemungkinan masih terlalu besar'; }
+};
+$('bgClear').onclick = () => { try { localStorage.removeItem(BGK); } catch (e) {} pendingBg = null; applyBg(''); $('bgFile').value = ''; };
+
+// ---------------- Pager: tab menu geser kanan-kiri + indikator Liquid Glass ----------------
+const PAGES = ['status', 'kontrol', 'fitur', 'game', 'kernel', 'alat', 'tampilan'];
+let activeP = 'status';
+function moveIndicator(btn) {
+  const ind = $('tabInd');
+  if (!btn) return;
+  ind.style.width = btn.offsetWidth + 'px';
+  ind.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
+}
+let dragging = false;
+function setActivePage(p) {
+  const wasStatus = activeP === 'status';
+  activeP = p;
+  // baru masuk tab Status -> jangan tunggu interval 2 dtk, ambil RAM/baterai/dll segar langsung
+  // (devinfo live cuma baca /proc & /sys, tidak ada getprop/dumpsys, jadi murah dipanggil di sini)
+  if (p === 'status' && !wasStatus) loadDev(false);
+  document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  if (dragging) return; // saat jari menggeser, indikator mengikuti jari (bukan snap ke tab)
+  const btn = document.querySelector('#tabbar button[data-p="' + p + '"]');
+  if (btn) { btn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); moveIndicator(btn); }
+}
+let navLock = null, navLockTimer = 0;
+function goToPage(p) {
+  const i = PAGES.indexOf(p); if (i < 0) return;
+  navLock = p; clearTimeout(navLockTimer);
+  navLockTimer = setTimeout(() => { navLock = null; }, 600); // jaga-jaga kalau threshold tujuan tak pernah kena pas
+  $('pager').scrollTo({ left: i * $('pager').clientWidth, behavior: 'smooth' });
+}
+// Tab bar bawah: tekan-tahan lalu GESER dengan jari - pil kaca mengikuti jari, halaman
+// berganti sambil digeser, tepi kiri/kanan otomatis menggulung bar. Ketuk biasa tetap bisa.
+const tb = $('tabbar');
+let dPid = null, dSx = 0, dX = 0, dMoved = false, dRaf = 0, dLast = null;
+function tabAtX(x) {
+  const btns = document.querySelectorAll('#tabbar button'); let best = btns[0], bd = 1e9;
+  for (const b of btns) { const r = b.getBoundingClientRect(); if (x >= r.left && x <= r.right) return b; const dd = Math.abs(x - (r.left + r.right) / 2); if (dd < bd) { bd = dd; best = b; } }
+  return best;
+}
+function placeInd(x) {
+  const ind = $('tabInd'), r = tb.getBoundingClientRect(), btns = document.querySelectorAll('#tabbar button');
+  const lo = btns[0].offsetLeft, hi = btns[btns.length - 1].offsetLeft + btns[btns.length - 1].offsetWidth, w = ind.offsetWidth;
+  const cx = Math.max(lo + w / 2, Math.min(hi - w / 2, x - r.left + tb.scrollLeft));
+  ind.style.transform = 'translateX(' + (cx - w / 2) + 'px)';
+}
+function dragLoop() {
+  if (!dragging) { dRaf = 0; return; }
+  const r = tb.getBoundingClientRect();
+  if (dX < r.left + 44) tb.scrollLeft -= 7; else if (dX > r.right - 44) tb.scrollLeft += 7;
+  placeInd(dX); dRaf = requestAnimationFrame(dragLoop);
+}
+function dragHover(x) {
+  const b = tabAtX(x); if (b.dataset.p === dLast) return;
+  dLast = b.dataset.p;
+  document.querySelectorAll('#tabbar button').forEach(o => o.classList.toggle('on', o === b));
+  $('tabInd').style.width = b.offsetWidth + 'px';
+  goToPage(dLast);
+  try { navigator.vibrate && navigator.vibrate(6); } catch (e) {}
+}
+tb.addEventListener('pointerdown', e => {
+  if (dPid !== null) return;
+  dPid = e.pointerId; dSx = dX = e.clientX; dMoved = false; dLast = null;
+  try { tb.setPointerCapture(e.pointerId); } catch (e2) {}
+});
+tb.addEventListener('pointermove', e => {
+  if (e.pointerId !== dPid) return;
+  dX = e.clientX;
+  if (!dMoved && Math.abs(dX - dSx) > 8) { dMoved = true; dragging = true; tb.classList.add('drag'); $('tabInd').style.width = tabAtX(dSx).offsetWidth + 'px'; dRaf = requestAnimationFrame(dragLoop); }
+  if (dragging) dragHover(dX);
+});
+function dragEnd(e) {
+  if (e.pointerId !== dPid) return;
+  const wasDrag = dragging, x = e.clientX;
+  dPid = null; dragging = false; tb.classList.remove('drag'); if (dRaf) { cancelAnimationFrame(dRaf); dRaf = 0; }
+  const b = tabAtX(wasDrag ? dX : x);
+  if (e.type === 'pointercancel' && !wasDrag) return;
+  goToPage(b.dataset.p); setActivePage(b.dataset.p); // snap pil ke tab tujuan
+}
+tb.addEventListener('pointerup', dragEnd);
+tb.addEventListener('pointercancel', dragEnd);
+document.querySelectorAll('#tabbar button').forEach(b => b.onclick = e => { if (e.detail === 0) goToPage(b.dataset.p); }); // klik via keyboard/aksesibilitas
+const pagerIo = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (!(e.isIntersecting && e.intersectionRatio > 0.6)) return;
+    const p = e.target.dataset.p;
+    if (navLock && p !== navLock) return; // halaman ini cuma 'lewat' saat scroll terprogram ke navLock, abaikan
+    if (navLock === p) { navLock = null; clearTimeout(navLockTimer); }
+    setActivePage(p);
+  });
+}, { root: $('pager'), threshold: [0.6] });
+document.querySelectorAll('.page').forEach(p => pagerIo.observe(p));
+setActivePage('status');
+window.addEventListener('resize', () => moveIndicator(document.querySelector('#tabbar button[data-p="' + activeP + '"]')));
+window.addEventListener('load', () => moveIndicator(document.querySelector('#tabbar button[data-p="' + activeP + '"]')));
+
+refreshStatus(); loadConf(); loadGames(); buildDev(); loadDev(true);
+setInterval(refreshStatus, 3000);
+setInterval(() => { if (activeP === 'status' && !document.hidden) loadDev(false); }, 2000);
+</script>
+</body>
+</html>
